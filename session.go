@@ -11,6 +11,8 @@ import (
 	"github.com/gohouse/t"
 )
 
+const beginStatus = 1
+
 // Session ...
 type Session struct {
 	IEngin
@@ -23,6 +25,7 @@ type Session struct {
 	lastSql      string
 	union        interface{}
 	transaction  bool
+	tx_index     int
 	err          error
 }
 
@@ -30,6 +33,7 @@ var _ ISession = (*Session)(nil)
 
 // NewSession : 初始化 Session
 func NewSession(e IEngin) *Session {
+
 	var s = new(Session)
 	s.IEngin = e
 	// 初始化 IBinder
@@ -97,24 +101,43 @@ func (s *Session) GetTableName() (string, error) {
 
 // Begin ...
 func (s *Session) Begin() (err error) {
-	s.tx, err = s.master.Begin()
 	s.SetTransaction(true)
+	if s.tx == nil {
+		s.tx, err = s.master.Begin()
+		s.tx_index = beginStatus
+	} else {
+		s.tx_index++
+	}
 	return
 }
 
 // Rollback ...
 func (s *Session) Rollback() (err error) {
-	err = s.tx.Rollback()
-	s.tx = nil
-	s.SetTransaction(false)
+	if s.tx != nil && s.transaction == true {
+		if s.tx_index == beginStatus {
+			s.SetTransaction(false)
+			err = s.tx.Rollback()
+			s.tx = nil
+		} else {
+			s.tx_index--
+		}
+	}
 	return
 }
 
 // Commit ...
 func (s *Session) Commit() (err error) {
-	err = s.tx.Commit()
-	s.tx = nil
-	s.SetTransaction(false)
+	if s.tx != nil {
+		if s.tx_index == beginStatus {
+			s.SetTransaction(false)
+			err = s.tx.Commit()
+			s.tx = nil
+		} else {
+			s.tx_index--
+		}
+	} else {
+		s.SetTransaction(false)
+	}
 	return
 }
 
